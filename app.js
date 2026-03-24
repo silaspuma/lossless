@@ -105,6 +105,10 @@ const store = {
   setPlayerState: (v) => store._set('ll_player', v),
   getLiked:     ()  => store._get('ll_liked', []),
   setLiked:     (v) => store._set('ll_liked', v),
+  getEQ:        ()  => store._get('ll_eq', { bass: 0, mids: 0, treble: 0 }),
+  setEQ:        (v) => store._set('ll_eq', v),
+  getAccent:    ()  => store._get('ll_accent', '#fc3c44'),
+  setAccent:    (v) => store._set('ll_accent', v),
 };
 
 /* ─── Metadata parser (jsmediatags wrapper) ──────────────────── */
@@ -254,6 +258,13 @@ class Player {
     this._url    = null;
     this._db     = null;  // set by App after DB is open
 
+    // Web Audio API (EQ)
+    this._audioCtx   = null;
+    this._srcNode    = null;
+    this._bassFilter = null;
+    this._midsFilter = null;
+    this._trebFilter = null;
+
     // Callbacks
     this.onTrackChange = null;
     this.onPlayState   = null;
@@ -265,6 +276,38 @@ class Player {
     this.audio.addEventListener('pause',      () => this.onPlayState?.());
     this.audio.addEventListener('ended',      () => this._handleEnded());
     this.audio.addEventListener('error',      () => { toast('Could not play this file.'); });
+  }
+
+  /* Lazily initialize Web Audio API (must happen after user gesture) */
+  _initAudioCtx() {
+    if (this._audioCtx) return;
+    try {
+      this._audioCtx   = new (window.AudioContext || window.webkitAudioContext)();
+      this._srcNode    = this._audioCtx.createMediaElementSource(this.audio);
+      this._bassFilter = this._audioCtx.createBiquadFilter();
+      this._bassFilter.type = 'lowshelf';
+      this._bassFilter.frequency.value = 250;
+      this._midsFilter = this._audioCtx.createBiquadFilter();
+      this._midsFilter.type = 'peaking';
+      this._midsFilter.frequency.value = 1000;
+      this._midsFilter.Q.value = 0.8;
+      this._trebFilter = this._audioCtx.createBiquadFilter();
+      this._trebFilter.type = 'highshelf';
+      this._trebFilter.frequency.value = 8000;
+      this._srcNode
+        .connect(this._bassFilter)
+        .connect(this._midsFilter)
+        .connect(this._trebFilter)
+        .connect(this._audioCtx.destination);
+    } catch (e) {
+      console.warn('Web Audio API not available:', e);
+    }
+  }
+
+  setEQ(bass, mids, treble) {
+    if (this._bassFilter) this._bassFilter.gain.value = bass;
+    if (this._midsFilter) this._midsFilter.gain.value = mids;
+    if (this._trebFilter) this._trebFilter.gain.value = treble;
   }
 
   get playing()   { return !this.audio.paused; }
@@ -304,7 +347,13 @@ class Player {
   }
 
   async play(db)  { if (!this.currentId) return; await this._load(db, true); }
-  togglePlay()   { this.playing ? this.audio.pause() : this.audio.play().catch(() => {}); }
+  togglePlay()   {
+    this._initAudioCtx();
+    if (this._audioCtx && this._audioCtx.state === 'suspended') {
+      this._audioCtx.resume().catch(() => {});
+    }
+    this.playing ? this.audio.pause() : this.audio.play().catch(() => {});
+  }
 
   seek(s)        { this.audio.currentTime = clamp(s, 0, this.duration); }
   seekPct(p)     { this.seek(p * this.duration); }
@@ -360,7 +409,13 @@ class Player {
     if (this._url) URL.revokeObjectURL(this._url);
     this._url = URL.createObjectURL(blob);
     this.audio.src = this._url;
-    if (autoPlay) await this.audio.play().catch(() => {});
+    if (autoPlay) {
+      this._initAudioCtx();
+      if (this._audioCtx && this._audioCtx.state === 'suspended') {
+        await this._audioCtx.resume().catch(() => {});
+      }
+      await this.audio.play().catch(() => {});
+    }
     this.onTrackChange?.();
   }
 
@@ -408,18 +463,32 @@ class App {
 
     this._artUrls = {}; // id → object URL for album art
     this._fpOpen  = false;
+    this._settingsOpen = false;
     this._lrcData = null;
     this._lrcHighlight = -1;
     this._seekDragging = false;
 
     // drag counter for whole-window drop
     this._dragCounter = 0;
+
+    // Accent colors palette
+    this._accentColors = [
+      { name: 'Red',    value: '#fc3c44' },
+      { name: 'Blue',   value: '#0a84ff' },
+      { name: 'Green',  value: '#30d158' },
+      { name: 'Purple', value: '#bf5af2' },
+      { name: 'Orange', value: '#ff9f0a' },
+      { name: 'Pink',   value: '#ff375f' },
+      { name: 'Cyan',   value: '#5ac8fa' },
+      { name: 'Yellow', value: '#ffd60a' },
+    ];
   }
 
   /* ══ Init ══════════════════════════════════════════════════ */
   async init() {
     await this.db.open();
     this._loadState();
+    this._applyAccent(store.getAccent());
     this._setupPlayer();
     this._setupUI();
     this._restorePlayerState();
@@ -486,9 +555,9 @@ class App {
 
   _onPlayState() {
     const playing = this.player.playing;
-    // Mini player icons
-    document.getElementById('mini-play-icon').classList.toggle('hidden', playing);
-    document.getElementById('mini-pause-icon').classList.toggle('hidden', !playing);
+    // Sidebar mini player icons
+    document.getElementById('smp-play-icon')?.classList.toggle('hidden', playing);
+    document.getElementById('smp-pause-icon')?.classList.toggle('hidden', !playing);
     // Full player icons
     document.getElementById('fp-play-icon').classList.toggle('hidden', playing);
     document.getElementById('fp-pause-icon').classList.toggle('hidden', !playing);
@@ -500,8 +569,9 @@ class App {
 
   _onTimeUpdate() {
     const { time, duration, pct } = this.player;
-    // Mini progress
-    document.getElementById('mini-progress-fill').style.width = `${pct * 100}%`;
+    // Sidebar mini player progress
+    const smpFill = document.getElementById('smp-progress-fill');
+    if (smpFill) smpFill.style.width = `${pct * 100}%`;
     // Full player
     if (!this._seekDragging) {
       document.getElementById('fp-progress-fill').style.width  = `${pct * 100}%`;
@@ -531,18 +601,22 @@ class App {
       artUrl = this._artUrls[id] || null;
     }
 
-    // Mini player
-    document.getElementById('mini-title').textContent  = track.title;
-    document.getElementById('mini-artist').textContent = track.artist;
-    const miniArt = document.getElementById('mini-art');
-    const miniPh  = document.getElementById('mini-art-placeholder');
-    if (artUrl) {
-      miniArt.src = artUrl;
-      miniArt.style.display = 'block';
-      miniPh.style.display  = 'none';
-    } else {
-      miniArt.style.display = 'none';
-      miniPh.style.display  = 'flex';
+    // Sidebar mini player
+    const smpTitle = document.getElementById('smp-title');
+    const smpArtist = document.getElementById('smp-artist');
+    const smpArt = document.getElementById('smp-art');
+    const smpPh  = document.getElementById('smp-art-placeholder');
+    if (smpTitle) smpTitle.textContent  = track.title;
+    if (smpArtist) smpArtist.textContent = track.artist;
+    if (smpArt && smpPh) {
+      if (artUrl) {
+        smpArt.src = artUrl;
+        smpArt.style.display = 'block';
+        smpPh.style.display  = 'none';
+      } else {
+        smpArt.style.display = 'none';
+        smpPh.style.display  = 'flex';
+      }
     }
 
     // Full player
@@ -672,10 +746,11 @@ class App {
     this._setupNav();
     this._setupUpload();
     this._setupSearch();
-    this._setupMiniPlayer();
+    this._setupSidebarMiniPlayer();
     this._setupFullPlayer();
     this._setupContextMenu();
     this._setupModalOverlay();
+    this._setupSettings();
   }
 
   /* ── Navigation ─────────────────────────────────────────── */
@@ -838,17 +913,17 @@ class App {
     });
   }
 
-  /* ── Mini player ────────────────────────────────────────── */
-  _setupMiniPlayer() {
-    const trigger = document.getElementById('mini-open-trigger');
-    const prev    = document.getElementById('mini-prev-btn');
-    const play    = document.getElementById('mini-play-btn');
-    const next    = document.getElementById('mini-next-btn');
+  /* ── Sidebar mini player ────────────────────────────────── */
+  _setupSidebarMiniPlayer() {
+    const trigger = document.getElementById('smp-open-trigger');
+    const prev    = document.getElementById('smp-prev-btn');
+    const play    = document.getElementById('smp-play-btn');
+    const next    = document.getElementById('smp-next-btn');
 
     trigger.addEventListener('click', () => this._openFullPlayer());
 
     // Controls must not bubble and open full player
-    const ctrl = document.getElementById('mini-controls-stop-prop');
+    const ctrl = document.getElementById('smp-controls-stop-prop');
     ctrl.addEventListener('click', (e) => e.stopPropagation());
 
     prev.addEventListener('click', () => this.player.prev(this.db));
@@ -857,7 +932,7 @@ class App {
   }
 
   _showMiniPlayer() {
-    document.getElementById('mini-player').classList.remove('hidden');
+    document.getElementById('sidebar-mini-player').classList.remove('hidden');
   }
 
   /* ── Full player ────────────────────────────────────────── */
@@ -957,7 +1032,10 @@ class App {
       if (e.key === ' ') { e.preventDefault(); this.player.togglePlay(); }
       if (e.key === 'ArrowRight') { e.preventDefault(); this.player.next(this.db); }
       if (e.key === 'ArrowLeft')  { e.preventDefault(); this.player.prev(this.db); }
-      if (e.key === 'Escape')     { if (this._fpOpen) this._closeFullPlayer(); }
+      if (e.key === 'Escape') {
+        if (this._settingsOpen) this._closeSettings();
+        else if (this._fpOpen)  this._closeFullPlayer();
+      }
     });
   }
 
@@ -1137,6 +1215,101 @@ class App {
 
   _closeModal() {
     document.getElementById('modal-overlay').classList.add('hidden');
+  }
+
+  /* ── Settings panel ─────────────────────────────────────── */
+  _setupSettings() {
+    const panel    = document.getElementById('settings-panel');
+    const openBtn  = document.getElementById('sidebar-settings-btn');
+    const closeBtn = document.getElementById('settings-close-btn');
+    const bg       = document.getElementById('settings-bg');
+
+    openBtn.addEventListener('click',  () => this._openSettings());
+    closeBtn.addEventListener('click', () => this._closeSettings());
+    bg.addEventListener('click',       () => this._closeSettings());
+
+    // EQ sliders
+    const savedEQ = store.getEQ();
+    const bands = [
+      { id: 'eq-bass',   valId: 'eq-bass-val',   key: 'bass'   },
+      { id: 'eq-mids',   valId: 'eq-mids-val',   key: 'mids'   },
+      { id: 'eq-treble', valId: 'eq-treble-val', key: 'treble' },
+    ];
+    bands.forEach(({ id, valId, key }) => {
+      const slider = document.getElementById(id);
+      const label  = document.getElementById(valId);
+      slider.value = savedEQ[key] ?? 0;
+      label.textContent = `${savedEQ[key] >= 0 ? '+' : ''}${savedEQ[key] ?? 0} dB`;
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value);
+        label.textContent = `${v >= 0 ? '+' : ''}${v} dB`;
+        const eq = store.getEQ();
+        eq[key] = v;
+        store.setEQ(eq);
+        this.player.setEQ(eq.bass, eq.mids, eq.treble);
+      });
+    });
+
+    // Reset EQ
+    document.getElementById('eq-reset-btn').addEventListener('click', () => {
+      bands.forEach(({ id, valId }) => {
+        document.getElementById(id).value = 0;
+        document.getElementById(valId).textContent = '0 dB';
+      });
+      store.setEQ({ bass: 0, mids: 0, treble: 0 });
+      this.player.setEQ(0, 0, 0);
+      toast('EQ reset');
+    });
+
+    // Color swatches
+    const swatchContainer = document.getElementById('color-swatches');
+    const currentAccent   = store.getAccent();
+    this._accentColors.forEach(({ name, value }) => {
+      const btn = document.createElement('button');
+      btn.className = `color-swatch${value === currentAccent ? ' active' : ''}`;
+      btn.style.background = value;
+      btn.title = name;
+      btn.setAttribute('aria-label', name);
+      btn.addEventListener('click', () => {
+        swatchContainer.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+        btn.classList.add('active');
+        store.setAccent(value);
+        this._applyAccent(value);
+        toast(`Accent: ${name}`);
+      });
+      swatchContainer.appendChild(btn);
+    });
+  }
+
+  _openSettings() {
+    const panel = document.getElementById('settings-panel');
+    panel.classList.remove('hidden');
+    // Initialize EQ filters now that user interacted
+    this.player._initAudioCtx();
+    const eq = store.getEQ();
+    this.player.setEQ(eq.bass, eq.mids, eq.treble);
+    requestAnimationFrame(() => panel.classList.add('open'));
+    this._settingsOpen = true;
+  }
+
+  _closeSettings() {
+    const panel = document.getElementById('settings-panel');
+    panel.classList.remove('open');
+    panel.addEventListener('transitionend', () => {
+      if (!this._settingsOpen) panel.classList.add('hidden');
+    }, { once: true });
+    this._settingsOpen = false;
+  }
+
+  _applyAccent(hex) {
+    // Parse hex to rgb
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const root = document.documentElement;
+    root.style.setProperty('--accent',      hex);
+    root.style.setProperty('--accent-dim',  `rgba(${r},${g},${b},.25)`);
+    root.style.setProperty('--accent-glow', `rgba(${r},${g},${b},.4)`);
   }
 
   /* ══ Library rendering ════════════════════════════════════ */

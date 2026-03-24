@@ -40,6 +40,37 @@
       </button>
     </div>
 
+    <!-- ══ SIDEBAR MINI PLAYER ══ -->
+    <div id="sidebar-mini-player" class="sidebar-mini-player hidden" role="region" aria-label="Now playing">
+      <div class="smp-progress-track">
+        <div class="smp-progress-fill" id="smp-progress-fill"></div>
+      </div>
+      <div class="smp-body" id="smp-open-trigger" title="Open player">
+        <div class="smp-art-wrap">
+          <img id="smp-art" src="" alt="Album art" />
+          <div class="smp-art-placeholder" id="smp-art-placeholder" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+        </div>
+        <div class="smp-info">
+          <div class="smp-title" id="smp-title">Nothing playing</div>
+          <div class="smp-artist" id="smp-artist"></div>
+        </div>
+        <div class="smp-controls" id="smp-controls-stop-prop">
+          <button class="smp-btn" id="smp-prev-btn" aria-label="Previous">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2.5" height="16" rx="1"/></svg>
+          </button>
+          <button class="smp-btn smp-play-btn" id="smp-play-btn" aria-label="Play/Pause">
+            <svg id="smp-play-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            <svg id="smp-pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="4" width="4" height="16" rx="1.5"/><rect x="14" y="4" width="4" height="16" rx="1.5"/></svg>
+          </button>
+          <button class="smp-btn" id="smp-next-btn" aria-label="Next">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><rect x="16.5" y="4" width="2.5" height="16" rx="1"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="sidebar-upload">
       <div class="upload-zone" id="upload-zone" role="button" tabindex="0" aria-label="Upload audio files">
         <input type="file" id="file-input" multiple accept="audio/*" hidden aria-hidden="true" />
@@ -51,7 +82,69 @@
         <span class="upload-hint">Drop files or click to browse</span>
       </div>
     </div>
+
+    <div class="sidebar-footer">
+      <button class="sidebar-settings-btn" id="sidebar-settings-btn" aria-label="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.8"/></svg>
+        Settings
+      </button>
+    </div>
   </nav>
+
+  <!-- ═══════════════════ SETTINGS PANEL ═══════════════════ -->
+  <div id="settings-panel" class="settings-panel hidden" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="settings-bg" id="settings-bg"></div>
+    <div class="settings-content">
+      <div class="settings-header">
+        <button class="settings-close-btn" id="settings-close-btn" aria-label="Close settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <span class="settings-title">Settings</span>
+        <div style="width:36px"></div>
+      </div>
+
+      <!-- Equalizer -->
+      <div class="settings-section">
+        <div class="settings-section-label">Equalizer</div>
+        <div class="eq-bands">
+          <div class="eq-band">
+            <span class="eq-band-label">Bass</span>
+            <div class="eq-slider-wrap">
+              <span class="eq-scale-top">+12</span>
+              <input type="range" class="eq-slider" id="eq-bass" min="-12" max="12" step="1" value="0" aria-label="Bass EQ" />
+              <span class="eq-scale-bot">−12</span>
+            </div>
+            <span class="eq-value" id="eq-bass-val">0 dB</span>
+          </div>
+          <div class="eq-band">
+            <span class="eq-band-label">Mids</span>
+            <div class="eq-slider-wrap">
+              <span class="eq-scale-top">+12</span>
+              <input type="range" class="eq-slider" id="eq-mids" min="-12" max="12" step="1" value="0" aria-label="Mids EQ" />
+              <span class="eq-scale-bot">−12</span>
+            </div>
+            <span class="eq-value" id="eq-mids-val">0 dB</span>
+          </div>
+          <div class="eq-band">
+            <span class="eq-band-label">Treble</span>
+            <div class="eq-slider-wrap">
+              <span class="eq-scale-top">+12</span>
+              <input type="range" class="eq-slider" id="eq-treble" min="-12" max="12" step="1" value="0" aria-label="Treble EQ" />
+              <span class="eq-scale-bot">−12</span>
+            </div>
+            <span class="eq-value" id="eq-treble-val">0 dB</span>
+          </div>
+        </div>
+        <button class="eq-reset-btn" id="eq-reset-btn">Reset EQ</button>
+      </div>
+
+      <!-- Accent Color -->
+      <div class="settings-section">
+        <div class="settings-section-label">Accent Color</div>
+        <div class="color-swatches" id="color-swatches" role="group" aria-label="Choose accent color"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- ═══════════════════ MAIN CONTENT ═══════════════════ -->
   <main id="main">
@@ -239,37 +332,6 @@
     </section>
 
   </main><!-- #main -->
-
-  <!-- ═══════════════════ MINI PLAYER ═══════════════════ -->
-  <div id="mini-player" class="hidden" role="region" aria-label="Now playing">
-    <div class="mini-progress-track">
-      <div class="mini-progress-fill" id="mini-progress-fill"></div>
-    </div>
-    <div class="mini-inner" id="mini-open-trigger">
-      <div class="mini-art-wrap">
-        <img id="mini-art" src="" alt="Album art" />
-        <div class="mini-art-placeholder" id="mini-art-placeholder" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
-        </div>
-      </div>
-      <div class="mini-info">
-        <div class="mini-title" id="mini-title">Nothing playing</div>
-        <div class="mini-artist" id="mini-artist"></div>
-      </div>
-      <div class="mini-controls" id="mini-controls-stop-prop">
-        <button class="mini-btn" id="mini-prev-btn" aria-label="Previous">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2.5" height="16" rx="1"/></svg>
-        </button>
-        <button class="mini-btn mini-play-btn" id="mini-play-btn" aria-label="Play/Pause">
-          <svg id="mini-play-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-          <svg id="mini-pause-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="4" width="4" height="16" rx="1.5"/><rect x="14" y="4" width="4" height="16" rx="1.5"/></svg>
-        </button>
-        <button class="mini-btn" id="mini-next-btn" aria-label="Next">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><rect x="16.5" y="4" width="2.5" height="16" rx="1"/></svg>
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- ═══════════════════ FULL PLAYER ═══════════════════ -->
   <div id="full-player" class="hidden" role="dialog" aria-modal="true" aria-label="Now playing">
