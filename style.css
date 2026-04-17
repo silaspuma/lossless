@@ -825,6 +825,58 @@ a { color: inherit; text-decoration: none; }
 }
 .eq-reset-btn:hover { background: var(--glass-hover); color: var(--text); }
 
+/* Pitch */
+.pitch-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pitch-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pitch-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg4);
+  outline: none;
+  cursor: pointer;
+}
+
+.pitch-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+
+.pitch-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+
+.pitch-value {
+  font-size: 12px;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
 /* Color swatches */
 .color-swatches {
   display: flex;
