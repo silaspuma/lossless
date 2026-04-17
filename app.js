@@ -326,9 +326,11 @@ class Player {
     this.pitch = safeSemitones;
     const rate = clamp(Math.pow(2, safeSemitones / 12), 0.0625, 16);
     this.audio.playbackRate = rate;
-    try { if ('preservesPitch' in this.audio) this.audio.preservesPitch = false; } catch {}
-    try { if ('mozPreservesPitch' in this.audio) this.audio.mozPreservesPitch = false; } catch {}
-    try { if ('webkitPreservesPitch' in this.audio) this.audio.webkitPreservesPitch = false; } catch {}
+    try {
+      if ('preservesPitch' in this.audio) this.audio.preservesPitch = false;
+      if ('mozPreservesPitch' in this.audio) this.audio.mozPreservesPitch = false;
+      if ('webkitPreservesPitch' in this.audio) this.audio.webkitPreservesPitch = false;
+    } catch {}
   }
 
   /* Load queue and optionally start playing */
@@ -1244,8 +1246,8 @@ class App {
 
     const formatPitch = (v) => {
       const n = Number(v);
-      const abs = Number.isInteger(n) ? n.toString() : n.toFixed(1);
-      return `${n > 0 ? '+' : ''}${abs} st`;
+      const formattedValue = Number.isInteger(n) ? n.toString() : n.toFixed(1);
+      return `${n > 0 ? '+' : ''}${formattedValue} st`;
     };
 
     // EQ sliders
