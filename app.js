@@ -7,6 +7,8 @@
 /* ─── Utilities ──────────────────────────────────────────────── */
 const uid = () => crypto.randomUUID();
 const AUDIO_EXTENSIONS = /\.(flac|m4a|mp3|ogg|wav|aac|opus|wma|aiff|aif|dsf|dsd)$/i;
+const MIN_PITCH_SEMITONES = -24;
+const MAX_PITCH_SEMITONES = 24;
 const fmt = (s) => {
   if (!isFinite(s) || s < 0) return '0:00';
   const m = Math.floor(s / 60);
@@ -267,6 +269,7 @@ class Player {
     this._bassFilter = null;
     this._midsFilter = null;
     this._trebFilter = null;
+    this._pitchAnimRaf = null;
 
     // Callbacks
     this.onTrackChange = null;
@@ -322,10 +325,35 @@ class Player {
   setVolume(v) { this.volume = v; this.audio.volume = v; }
 
   setPitch(semitones = 0) {
-    const safeSemitones = Number.isFinite(semitones) ? semitones : 0;
+    const safeSemitones = clamp(
+      Number.isFinite(semitones) ? semitones : 0,
+      MIN_PITCH_SEMITONES,
+      MAX_PITCH_SEMITONES
+    );
     this.pitch = safeSemitones;
-    const rate = clamp(Math.pow(2, safeSemitones / 12), 0.0625, 16);
-    this.audio.playbackRate = rate;
+    const rate = clamp(Math.pow(2, safeSemitones / 12), 0.25, 4);
+    const from = this.audio.playbackRate || 1;
+    if (this._pitchAnimRaf !== null) cancelAnimationFrame(this._pitchAnimRaf);
+    if (Math.abs(rate - from) < 0.0001) {
+      this.audio.playbackRate = rate;
+      this.audio.defaultPlaybackRate = rate;
+      return;
+    }
+    const duration = clamp(Math.abs(rate - from) * 120, 40, 180);
+    const start = performance.now();
+    const tick = (now) => {
+      const t = clamp((now - start) / duration, 0, 1);
+      const smooth = 1 - Math.pow(1 - t, 3);
+      const nextRate = from + (rate - from) * smooth;
+      this.audio.playbackRate = nextRate;
+      this.audio.defaultPlaybackRate = nextRate;
+      if (t < 1) {
+        this._pitchAnimRaf = requestAnimationFrame(tick);
+      } else {
+        this._pitchAnimRaf = null;
+      }
+    };
+    this._pitchAnimRaf = requestAnimationFrame(tick);
     try {
       if ('preservesPitch' in this.audio) this.audio.preservesPitch = false;
       if ('mozPreservesPitch' in this.audio) this.audio.mozPreservesPitch = false;
@@ -1286,14 +1314,18 @@ class App {
     // Pitch slider
     const pitchSlider = document.getElementById('pitch-slider');
     const pitchVal    = document.getElementById('pitch-val');
-    const savedPitch  = parseFloat(store.getPitch()) || 0;
+    const savedPitch  = clamp(parseFloat(store.getPitch()) || 0, MIN_PITCH_SEMITONES, MAX_PITCH_SEMITONES);
     pitchSlider.value = savedPitch;
     pitchVal.textContent = formatPitch(savedPitch);
     pitchSlider.addEventListener('input', () => {
       const v = parseFloat(pitchSlider.value);
       pitchVal.textContent = formatPitch(v);
-      store.setPitch(v);
       this.player.setPitch(v);
+    });
+    pitchSlider.addEventListener('change', () => {
+      store.setPitch(this.player.pitch);
+      pitchSlider.value = this.player.pitch;
+      pitchVal.textContent = formatPitch(this.player.pitch);
     });
 
     // Reset Pitch
