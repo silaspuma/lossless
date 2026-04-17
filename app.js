@@ -107,6 +107,8 @@ const store = {
   setLiked:     (v) => store._set('ll_liked', v),
   getEQ:        ()  => store._get('ll_eq', { bass: 0, mids: 0, treble: 0 }),
   setEQ:        (v) => store._set('ll_eq', v),
+  getPitch:     ()  => store._get('ll_pitch', 0),
+  setPitch:     (v) => store._set('ll_pitch', v),
   getAccent:    ()  => store._get('ll_accent', '#fc3c44'),
   setAccent:    (v) => store._set('ll_accent', v),
 };
@@ -255,6 +257,7 @@ class Player {
     this.shuffle = false;
     this.repeat  = 'none'; // 'none' | 'all' | 'one'
     this.volume  = 1;
+    this.pitch   = 0;
     this._url    = null;
     this._db     = null;  // set by App after DB is open
 
@@ -317,6 +320,18 @@ class Player {
   get pct()       { return this.duration ? this.time / this.duration : 0; }
 
   setVolume(v) { this.volume = v; this.audio.volume = v; }
+
+  setPitch(semitones = 0) {
+    const safeSemitones = Number.isFinite(semitones) ? semitones : 0;
+    this.pitch = safeSemitones;
+    const rate = clamp(Math.pow(2, safeSemitones / 12), 0.0625, 16);
+    this.audio.playbackRate = rate;
+    try {
+      if ('preservesPitch' in this.audio) this.audio.preservesPitch = false;
+      if ('mozPreservesPitch' in this.audio) this.audio.mozPreservesPitch = false;
+      if ('webkitPreservesPitch' in this.audio) this.audio.webkitPreservesPitch = false;
+    } catch {}
+  }
 
   /* Load queue and optionally start playing */
   async setQueue(ids, startIdx = 0, db, autoPlay = true) {
@@ -504,6 +519,7 @@ class App {
     this.player.shuffle = ps.shuffle ?? false;
     this.player.repeat  = ps.repeat  ?? 'none';
     this.player.setVolume(ps.volume  ?? 1);
+    this.player.setPitch(parseFloat(store.getPitch()) || 0);
     // Restore queue
     const q = store.getQueue();
     if (q.length) {
@@ -1228,6 +1244,12 @@ class App {
     closeBtn.addEventListener('click', () => this._closeSettings());
     bg.addEventListener('click',       () => this._closeSettings());
 
+    const formatPitch = (v) => {
+      const n = Number(v);
+      const formattedValue = Number.isInteger(n) ? n.toString() : n.toFixed(1);
+      return `${n > 0 ? '+' : ''}${formattedValue} st`;
+    };
+
     // EQ sliders
     const savedEQ = store.getEQ();
     const bands = [
@@ -1261,6 +1283,28 @@ class App {
       toast('EQ reset');
     });
 
+    // Pitch slider
+    const pitchSlider = document.getElementById('pitch-slider');
+    const pitchVal    = document.getElementById('pitch-val');
+    const savedPitch  = parseFloat(store.getPitch()) || 0;
+    pitchSlider.value = savedPitch;
+    pitchVal.textContent = formatPitch(savedPitch);
+    pitchSlider.addEventListener('input', () => {
+      const v = parseFloat(pitchSlider.value);
+      pitchVal.textContent = formatPitch(v);
+      store.setPitch(v);
+      this.player.setPitch(v);
+    });
+
+    // Reset Pitch
+    document.getElementById('pitch-reset-btn').addEventListener('click', () => {
+      pitchSlider.value = 0;
+      pitchVal.textContent = '0 st';
+      store.setPitch(0);
+      this.player.setPitch(0);
+      toast('Pitch reset');
+    });
+
     // Color swatches
     const swatchContainer = document.getElementById('color-swatches');
     const currentAccent   = store.getAccent();
@@ -1288,6 +1332,7 @@ class App {
     this.player._initAudioCtx();
     const eq = store.getEQ();
     this.player.setEQ(eq.bass, eq.mids, eq.treble);
+    this.player.setPitch(parseFloat(store.getPitch()) || 0);
     requestAnimationFrame(() => panel.classList.add('open'));
     this._settingsOpen = true;
   }
