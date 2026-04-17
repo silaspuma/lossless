@@ -9,6 +9,10 @@ const uid = () => crypto.randomUUID();
 const AUDIO_EXTENSIONS = /\.(flac|m4a|mp3|ogg|wav|aac|opus|wma|aiff|aif|dsf|dsd)$/i;
 const MIN_PITCH_SEMITONES = -24;
 const MAX_PITCH_SEMITONES = 24;
+const PITCH_RATE_TO_DURATION_MS = 120;
+const MIN_PITCH_ANIM_MS = 40;
+const MAX_PITCH_ANIM_MS = 180;
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 const fmt = (s) => {
   if (!isFinite(s) || s < 0) return '0:00';
   const m = Math.floor(s / 60);
@@ -333,32 +337,35 @@ class Player {
     this.pitch = safeSemitones;
     const rate = clamp(Math.pow(2, safeSemitones / 12), 0.25, 4);
     const from = this.audio.playbackRate || 1;
-    if (this._pitchAnimRaf !== null) cancelAnimationFrame(this._pitchAnimRaf);
-    if (Math.abs(rate - from) < 0.0001) {
-      this.audio.playbackRate = rate;
-      this.audio.defaultPlaybackRate = rate;
-      return;
-    }
-    const duration = clamp(Math.abs(rate - from) * 120, 40, 180);
-    const start = performance.now();
-    const tick = (now) => {
-      const t = clamp((now - start) / duration, 0, 1);
-      const smooth = 1 - Math.pow(1 - t, 3);
-      const nextRate = from + (rate - from) * smooth;
-      this.audio.playbackRate = nextRate;
-      this.audio.defaultPlaybackRate = nextRate;
-      if (t < 1) {
-        this._pitchAnimRaf = requestAnimationFrame(tick);
-      } else {
-        this._pitchAnimRaf = null;
-      }
-    };
-    this._pitchAnimRaf = requestAnimationFrame(tick);
     try {
       if ('preservesPitch' in this.audio) this.audio.preservesPitch = false;
       if ('mozPreservesPitch' in this.audio) this.audio.mozPreservesPitch = false;
       if ('webkitPreservesPitch' in this.audio) this.audio.webkitPreservesPitch = false;
     } catch {}
+    if (this._pitchAnimRaf !== null) {
+      cancelAnimationFrame(this._pitchAnimRaf);
+      this._pitchAnimRaf = null;
+    }
+    if (Math.abs(rate - from) < 0.0001) {
+      this.audio.playbackRate = rate;
+      this.audio.defaultPlaybackRate = rate;
+      return;
+    }
+    const duration = clamp(Math.abs(rate - from) * PITCH_RATE_TO_DURATION_MS, MIN_PITCH_ANIM_MS, MAX_PITCH_ANIM_MS);
+    const start = performance.now();
+    const tick = (now) => {
+      const t = clamp((now - start) / duration, 0, 1);
+      const smooth = easeOutCubic(t);
+      const nextRate = from + (rate - from) * smooth;
+      this.audio.playbackRate = nextRate;
+      if (t < 1) {
+        this._pitchAnimRaf = requestAnimationFrame(tick);
+      } else {
+        this.audio.defaultPlaybackRate = rate;
+        this._pitchAnimRaf = null;
+      }
+    };
+    this._pitchAnimRaf = requestAnimationFrame(tick);
   }
 
   /* Load queue and optionally start playing */
@@ -1324,8 +1331,6 @@ class App {
     });
     pitchSlider.addEventListener('change', () => {
       store.setPitch(this.player.pitch);
-      pitchSlider.value = this.player.pitch;
-      pitchVal.textContent = formatPitch(this.player.pitch);
     });
 
     // Reset Pitch
